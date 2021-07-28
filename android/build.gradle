@@ -68,12 +68,12 @@ afterEvaluate {
                     name = 'signal-service-android'
                     packaging = 'aar'
                     description = 'Signal Service communication library for Android, unofficial fork'
-                    url = 'https://github.com/Turasa/libsignal-service-java'
+                    url = 'https://gitlab.com/beeper/libsignal-service-java'
 
                     scm {
-                        url = 'scm:git@github.com:Turasa/libsignal-service-java.git'
-                        connection = 'scm:git@github.com:Turasa/libsignal-service-java.git'
-                        developerConnection = 'scm:git@github.com:Turasa/libsignal-service-java.git'
+                        url = 'scm:git@gitlab.com:beeper/libsignal-service-java.git'
+                        connection = 'scm:git@gitlab.com:beeper/libsignal-service-java.git'
+                        developerConnection = 'scm:git@gitlab.com:beeper/libsignal-service-java.git'
                     }
 
                     licenses {

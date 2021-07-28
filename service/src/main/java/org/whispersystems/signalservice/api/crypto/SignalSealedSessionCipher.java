@@ -19,6 +19,7 @@ import org.signal.libsignal.protocol.InvalidRegistrationIdException;
 import org.signal.libsignal.protocol.NoSessionException;
 import org.signal.libsignal.protocol.SignalProtocolAddress;
 import org.signal.libsignal.protocol.UntrustedIdentityException;
+import org.signal.libsignal.protocol.logging.Log;
 import org.whispersystems.signalservice.api.SignalSessionLock;
 
 import java.util.List;
@@ -27,6 +28,7 @@ import java.util.List;
  * A thread-safe wrapper around {@link SealedSessionCipher}.
  */
 public class SignalSealedSessionCipher {
+  private static final String TAG = SignalSealedSessionCipher.class.getSimpleName();
 
   private final SignalSessionLock   lock;
   private final SealedSessionCipher cipher;
@@ -53,8 +55,12 @@ public class SignalSealedSessionCipher {
   }
 
   public SealedSessionCipher.DecryptionResult decrypt(CertificateValidator validator, byte[] ciphertext, long timestamp) throws InvalidMetadataMessageException, InvalidMetadataVersionException, ProtocolInvalidMessageException, ProtocolInvalidKeyException, ProtocolNoSessionException, ProtocolLegacyMessageException, ProtocolInvalidVersionException, ProtocolDuplicateMessageException, ProtocolInvalidKeyIdException, ProtocolUntrustedIdentityException, SelfSendException {
+    Log.i(TAG, "SignalSealedSessionCipher pre-try");
     try (SignalSessionLock.Lock unused = lock.acquire()) {
-      return cipher.decrypt(validator, ciphertext, timestamp);
+      Log.i(TAG, "SignalSealedSessionCipher in-try");
+      SealedSessionCipher.DecryptionResult result = cipher.decrypt(validator, ciphertext, timestamp);
+      Log.i(TAG, "SignalSealedSessionCipher post-result");
+      return result;
     }
   }
 

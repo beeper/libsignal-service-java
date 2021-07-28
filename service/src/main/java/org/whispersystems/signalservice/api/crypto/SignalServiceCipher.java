@@ -41,6 +41,7 @@ import org.signal.libsignal.protocol.message.CiphertextMessage;
 import org.signal.libsignal.protocol.message.PlaintextContent;
 import org.signal.libsignal.protocol.message.PreKeySignalMessage;
 import org.signal.libsignal.protocol.message.SignalMessage;
+import org.signal.libsignal.protocol.state.SignalProtocolStore;
 import org.whispersystems.signalservice.api.InvalidMessageStructureException;
 import org.whispersystems.signalservice.api.SignalServiceAccountDataStore;
 import org.whispersystems.signalservice.api.SignalSessionLock;
@@ -67,100 +68,107 @@ import java.util.Optional;
  */
 public class SignalServiceCipher {
 
-  @SuppressWarnings("unused")
-  private static final String TAG = SignalServiceCipher.class.getSimpleName();
+    private static final String TAG = SignalServiceCipher.class.getSimpleName();
 
-  private final SignalServiceAccountDataStore signalProtocolStore;
-  private final SignalSessionLock             sessionLock;
-  private final SignalServiceAddress localAddress;
-  private final int                  localDeviceId;
-  private final CertificateValidator certificateValidator;
+    private final SignalServiceAccountDataStore signalProtocolStore;
+    private final SignalSessionLock sessionLock;
+    private final SignalServiceAddress localAddress;
+    private final int localDeviceId;
+    private final CertificateValidator certificateValidator;
 
-  public SignalServiceCipher(SignalServiceAddress localAddress,
-                             int localDeviceId,
-                             SignalServiceAccountDataStore signalProtocolStore,
-                             SignalSessionLock sessionLock,
-                             CertificateValidator certificateValidator)
-  {
-    this.signalProtocolStore  = signalProtocolStore;
-    this.sessionLock          = sessionLock;
-    this.localAddress         = localAddress;
-    this.localDeviceId        = localDeviceId;
-    this.certificateValidator = certificateValidator;
-  }
-
-  public byte[] encryptForGroup(DistributionId distributionId,
-                                List<SignalProtocolAddress> destinations,
-                                SenderCertificate senderCertificate,
-                                byte[] unpaddedMessage,
-                                ContentHint contentHint,
-                                Optional<byte[]> groupId)
-      throws NoSessionException, UntrustedIdentityException, InvalidKeyException, InvalidRegistrationIdException
-  {
-    PushTransportDetails             transport            = new PushTransportDetails();
-    SignalProtocolAddress            localProtocolAddress = new SignalProtocolAddress(localAddress.getIdentifier(), localDeviceId);
-    SignalGroupCipher                groupCipher          = new SignalGroupCipher(sessionLock, new GroupCipher(signalProtocolStore, localProtocolAddress));
-    SignalSealedSessionCipher        sessionCipher        = new SignalSealedSessionCipher(sessionLock, new SealedSessionCipher(signalProtocolStore, localAddress.getServiceId().uuid(), localAddress.getNumber().orElse(null), localDeviceId));
-    CiphertextMessage                message              = groupCipher.encrypt(distributionId.asUuid(), transport.getPaddedMessageBody(unpaddedMessage));
-    UnidentifiedSenderMessageContent messageContent       = new UnidentifiedSenderMessageContent(message,
-                                                                                                 senderCertificate,
-                                                                                                 contentHint.getType(),
-                                                                                                 groupId);
-
-    return sessionCipher.multiRecipientEncrypt(destinations, messageContent);
-  }
-
-  public OutgoingPushMessage encrypt(SignalProtocolAddress        destination,
-                                     Optional<UnidentifiedAccess> unidentifiedAccess,
-                                     EnvelopeContent              content)
-      throws UntrustedIdentityException, InvalidKeyException
-  {
-    if (unidentifiedAccess.isPresent()) {
-      SignalSessionCipher       sessionCipher        = new SignalSessionCipher(sessionLock, new SessionCipher(signalProtocolStore, destination));
-      SignalSealedSessionCipher sealedSessionCipher  = new SignalSealedSessionCipher(sessionLock, new SealedSessionCipher(signalProtocolStore, localAddress.getServiceId().uuid(), localAddress.getNumber().orElse(null), localDeviceId));
-
-      return content.processSealedSender(sessionCipher, sealedSessionCipher, destination, unidentifiedAccess.get().getUnidentifiedCertificate());
-    } else {
-      SignalSessionCipher sessionCipher = new SignalSessionCipher(sessionLock, new SessionCipher(signalProtocolStore, destination));
-
-      return content.processUnsealedSender(sessionCipher, destination);
+    public SignalServiceCipher(SignalServiceAddress localAddress,
+            int localDeviceId,
+            SignalServiceAccountDataStore signalProtocolStore,
+            SignalSessionLock sessionLock,
+            CertificateValidator certificateValidator) {
+        this.signalProtocolStore = signalProtocolStore;
+        this.sessionLock = sessionLock;
+        this.localAddress = localAddress;
+        this.localDeviceId = localDeviceId;
+        this.certificateValidator = certificateValidator;
     }
-  }
 
-  /**
-   * Decrypt a received {@link SignalServiceEnvelope}
-   *
-   * @param envelope The received SignalServiceEnvelope
-   *
-   * @return a decrypted SignalServiceContent
-   */
-  public SignalServiceContent decrypt(SignalServiceEnvelope envelope)
-      throws InvalidMetadataMessageException, InvalidMetadataVersionException,
-      ProtocolInvalidKeyIdException, ProtocolLegacyMessageException,
-      ProtocolUntrustedIdentityException, ProtocolNoSessionException,
-      ProtocolInvalidVersionException, ProtocolInvalidMessageException,
-      ProtocolInvalidKeyException, ProtocolDuplicateMessageException,
-      SelfSendException, UnsupportedDataMessageException, InvalidMessageStructureException
-  {
-    try {
-      if (envelope.hasContent()) {
-        Plaintext                   plaintext = decrypt(envelope, envelope.getContent());
-        SignalServiceProtos.Content content   = SignalServiceProtos.Content.parseFrom(plaintext.getData());
+    public byte[] encryptForGroup(DistributionId distributionId,
+            List<SignalProtocolAddress> destinations,
+            SenderCertificate senderCertificate,
+            byte[] unpaddedMessage,
+            ContentHint contentHint,
+            Optional<byte[]> groupId)
+            throws NoSessionException, UntrustedIdentityException, InvalidKeyException, InvalidRegistrationIdException {
+        PushTransportDetails transport = new PushTransportDetails();
+        SignalProtocolAddress localProtocolAddress = new SignalProtocolAddress(localAddress.getIdentifier(),
+                localDeviceId);
+        SignalGroupCipher groupCipher = new SignalGroupCipher(sessionLock,
+                new GroupCipher(signalProtocolStore, localProtocolAddress));
+        SignalSealedSessionCipher sessionCipher = new SignalSealedSessionCipher(sessionLock,
+                new SealedSessionCipher(signalProtocolStore, localAddress.getServiceId().uuid(),
+                        localAddress.getNumber().orElse(null), localDeviceId));
+        CiphertextMessage message = groupCipher.encrypt(distributionId.asUuid(),
+                transport.getPaddedMessageBody(unpaddedMessage));
+        UnidentifiedSenderMessageContent messageContent = new UnidentifiedSenderMessageContent(message,
+                senderCertificate,
+                contentHint.getType(),
+                groupId);
 
-        SignalServiceContentProto contentProto = SignalServiceContentProto.newBuilder()
-                                                                          .setLocalAddress(SignalServiceAddressProtobufSerializer.toProtobuf(localAddress))
-                                                                          .setMetadata(SignalServiceMetadataProtobufSerializer.toProtobuf(plaintext.metadata))
-                                                                          .setContent(content)
-                                                                          .build();
-
-        return SignalServiceContent.createFromProto(contentProto);
-      }
-
-      return null;
-    } catch (InvalidProtocolBufferException e) {
-      throw new InvalidMetadataMessageException(e);
+        return sessionCipher.multiRecipientEncrypt(destinations, messageContent);
     }
-  }
+
+    public OutgoingPushMessage encrypt(SignalProtocolAddress destination,
+            Optional<UnidentifiedAccess> unidentifiedAccess,
+            EnvelopeContent content)
+            throws UntrustedIdentityException, InvalidKeyException {
+        if (unidentifiedAccess.isPresent()) {
+            SignalSessionCipher sessionCipher = new SignalSessionCipher(sessionLock,
+                    new SessionCipher(signalProtocolStore, destination));
+            SignalSealedSessionCipher sealedSessionCipher = new SignalSealedSessionCipher(sessionLock,
+                    new SealedSessionCipher(signalProtocolStore, localAddress.getServiceId().uuid(),
+                            localAddress.getNumber().orElse(null), localDeviceId));
+
+            return content.processSealedSender(sessionCipher, sealedSessionCipher, destination,
+                    unidentifiedAccess.get().getUnidentifiedCertificate());
+        } else {
+            SignalSessionCipher sessionCipher = new SignalSessionCipher(sessionLock,
+                    new SessionCipher(signalProtocolStore, destination));
+
+            return content.processUnsealedSender(sessionCipher, destination);
+        }
+    }
+
+    /**
+     * Decrypt a received {@link SignalServiceEnvelope}
+     *
+     * @param envelope The received SignalServiceEnvelope
+     *
+     * @return a decrypted SignalServiceContent
+     */
+    public SignalServiceContent decrypt(SignalServiceEnvelope envelope)
+            throws InvalidMetadataMessageException, InvalidMetadataVersionException,
+            ProtocolInvalidKeyIdException, ProtocolLegacyMessageException,
+            ProtocolUntrustedIdentityException, ProtocolNoSessionException,
+            ProtocolInvalidVersionException, ProtocolInvalidMessageException,
+            ProtocolInvalidKeyException, ProtocolDuplicateMessageException,
+            SelfSendException, UnsupportedDataMessageException, InvalidMessageStructureException,
+            UntrustedIdentityException {
+        try {
+          if (envelope.hasContent()) {
+            Log.i(TAG, "hasContent");
+            Plaintext plaintext = decrypt(envelope, envelope.getContent());
+            SignalServiceProtos.Content content = SignalServiceProtos.Content.parseFrom(plaintext.getData());
+
+            SignalServiceContentProto contentProto = SignalServiceContentProto.newBuilder()
+                    .setLocalAddress(SignalServiceAddressProtobufSerializer.toProtobuf(localAddress))
+                    .setMetadata(SignalServiceMetadataProtobufSerializer.toProtobuf(plaintext.metadata))
+                    .setContent(content)
+                    .build();
+
+            return SignalServiceContent.createFromProto(contentProto);
+          }
+
+          return null;
+        } catch (InvalidProtocolBufferException e) {
+          throw new InvalidMetadataMessageException(e);
+        }
+    }
 
   private Plaintext decrypt(SignalServiceEnvelope envelope, byte[] ciphertext)
       throws InvalidMetadataMessageException, InvalidMetadataVersionException,
@@ -168,7 +176,8 @@ public class SignalServiceCipher {
       ProtocolLegacyMessageException, ProtocolInvalidKeyException,
       ProtocolInvalidVersionException, ProtocolInvalidMessageException,
       ProtocolInvalidKeyIdException, ProtocolNoSessionException,
-      SelfSendException, InvalidMessageStructureException
+      SelfSendException, InvalidMessageStructureException,
+      UntrustedIdentityException
   {
     try {
 
@@ -176,10 +185,12 @@ public class SignalServiceCipher {
       SignalServiceMetadata metadata;
 
       if (!envelope.hasSourceUuid() && !envelope.isUnidentifiedSender()) {
+        Log.i(TAG, "!hasSourceUuid && !isUnidentifiedSender");
         throw new InvalidMessageStructureException("Non-UD envelope is missing a UUID!");
       }
 
       if (envelope.isPreKeySignalMessage()) {
+        Log.i(TAG, "isPreKeySignalMessage");
         SignalProtocolAddress sourceAddress = new SignalProtocolAddress(envelope.getSourceUuid().get(), envelope.getSourceDevice());
         SignalSessionCipher   sessionCipher = new SignalSessionCipher(sessionLock, new SessionCipher(signalProtocolStore, sourceAddress));
 
@@ -188,6 +199,7 @@ public class SignalServiceCipher {
 
         signalProtocolStore.clearSenderKeySharedWith(Collections.singleton(sourceAddress));
       } else if (envelope.isSignalMessage()) {
+        Log.i(TAG, "isSignalMessage");
         SignalProtocolAddress sourceAddress = new SignalProtocolAddress(envelope.getSourceUuid().get(), envelope.getSourceDevice());
         SignalSessionCipher   sessionCipher = new SignalSessionCipher(sessionLock, new SessionCipher(signalProtocolStore, sourceAddress));
 
@@ -197,23 +209,29 @@ public class SignalServiceCipher {
         paddedMessage = new PlaintextContent(ciphertext).getBody();
         metadata      = new SignalServiceMetadata(envelope.getSourceAddress(), envelope.getSourceDevice(), envelope.getTimestamp(), envelope.getServerReceivedTimestamp(), envelope.getServerDeliveredTimestamp(), false, envelope.getServerGuid(), Optional.empty(), envelope.getDestinationUuid());
       } else if (envelope.isUnidentifiedSender()) {
-        SignalSealedSessionCipher sealedSessionCipher = new SignalSealedSessionCipher(sessionLock, new SealedSessionCipher(signalProtocolStore, localAddress.getServiceId().uuid(), localAddress.getNumber().orElse(null), localDeviceId));
-        DecryptionResult          result              = sealedSessionCipher.decrypt(certificateValidator, ciphertext, envelope.getServerReceivedTimestamp());
-        SignalServiceAddress      resultAddress       = new SignalServiceAddress(ACI.parseOrThrow(result.getSenderUuid()), result.getSenderE164());
-        Optional<byte[]>          groupId             = result.getGroupId();
-        boolean                   needsReceipt        = true;
+        Log.i(TAG, "isUnidentifiedSender");
+        try {
+            SignalSealedSessionCipher sealedSessionCipher = new SignalSealedSessionCipher(sessionLock, new SealedSessionCipher(signalProtocolStore, localAddress.getServiceId().uuid(), localAddress.getNumber().orElse(null), localDeviceId));
+            DecryptionResult          result              = sealedSessionCipher.decrypt(certificateValidator, ciphertext, envelope.getServerReceivedTimestamp());
+            SignalServiceAddress      resultAddress       = new SignalServiceAddress(ACI.parseOrThrow(result.getSenderUuid()), result.getSenderE164());
+            Optional<byte[]>          groupId             = result.getGroupId();
+            boolean                   needsReceipt        = true;
 
-        if (envelope.hasSourceUuid()) {
-          Log.w(TAG, "[" + envelope.getTimestamp() + "] Received a UD-encrypted message sent over an identified channel. Marking as needsReceipt=false");
-          needsReceipt = false;
+            if (envelope.hasSourceUuid()) {
+              Log.w(TAG, "[" + envelope.getTimestamp() + "] Received a UD-encrypted message sent over an identified channel. Marking as needsReceipt=false");
+              needsReceipt = false;
+            }
+
+            if (result.getCiphertextMessageType() == CiphertextMessage.PREKEY_TYPE) {
+              signalProtocolStore.clearSenderKeySharedWith(Collections.singleton(new SignalProtocolAddress(result.getSenderUuid(), result.getDeviceId())));
+            }
+
+            paddedMessage = result.getPaddedMessage();
+            metadata      = new SignalServiceMetadata(resultAddress, result.getDeviceId(), envelope.getTimestamp(), envelope.getServerReceivedTimestamp(), envelope.getServerDeliveredTimestamp(), needsReceipt, envelope.getServerGuid(), groupId, envelope.getDestinationUuid());
+        } catch (Exception e) {
+          Log.e(TAG, "Exception of type " + e.getClass().getName() + ": " + e.toString());
+          throw e;
         }
-
-        if (result.getCiphertextMessageType() == CiphertextMessage.PREKEY_TYPE) {
-          signalProtocolStore.clearSenderKeySharedWith(Collections.singleton(new SignalProtocolAddress(result.getSenderUuid(), result.getDeviceId())));
-        }
-
-        paddedMessage = result.getPaddedMessage();
-        metadata      = new SignalServiceMetadata(resultAddress, result.getDeviceId(), envelope.getTimestamp(), envelope.getServerReceivedTimestamp(), envelope.getServerDeliveredTimestamp(), needsReceipt, envelope.getServerGuid(), groupId, envelope.getDestinationUuid());
       } else {
         throw new InvalidMetadataMessageException("Unknown type: " + envelope.getType());
       }
@@ -233,7 +251,7 @@ public class SignalServiceCipher {
     } catch (InvalidKeyException e) {
       throw new ProtocolInvalidKeyException(e, envelope.getSourceIdentifier(), envelope.getSourceDevice());
     } catch (UntrustedIdentityException e) {
-      throw new ProtocolUntrustedIdentityException(e, envelope.getSourceIdentifier(), envelope.getSourceDevice());
+      throw e;
     } catch (InvalidVersionException e) {
       throw new ProtocolInvalidVersionException(e, envelope.getSourceIdentifier(), envelope.getSourceDevice());
     } catch (NoSessionException e) {
@@ -241,21 +259,21 @@ public class SignalServiceCipher {
     }
   }
 
-  private static class Plaintext {
-    private final SignalServiceMetadata metadata;
-    private final byte[]   data;
+    private static class Plaintext {
+        private final SignalServiceMetadata metadata;
+        private final byte[] data;
 
-    private Plaintext(SignalServiceMetadata metadata, byte[] data) {
-      this.metadata = metadata;
-      this.data     = data;
-    }
+        private Plaintext(SignalServiceMetadata metadata, byte[] data) {
+            this.metadata = metadata;
+            this.data = data;
+        }
 
-    public SignalServiceMetadata getMetadata() {
-      return metadata;
-    }
+        public SignalServiceMetadata getMetadata() {
+            return metadata;
+        }
 
-    public byte[] getData() {
-      return data;
+        public byte[] getData() {
+            return data;
+        }
     }
-  }
 }

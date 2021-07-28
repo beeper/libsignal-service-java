@@ -1843,6 +1843,7 @@ public class SignalServiceMessageSender {
     while (recipientIterator.hasNext()) {
       SignalServiceAddress         recipient = recipientIterator.next();
       Optional<UnidentifiedAccess> access    = unidentifiedAccessIterator.next();
+      Log.d(TAG, "Sending to " + recipient.getIdentifier());
       futureResults.add(executor.submit(() -> {
         SendMessageResult result = sendMessage(recipient, access, timestamp, content, online, cancelationSignal, urgent, story);
         if (partialListener != null) {
@@ -1921,12 +1922,22 @@ public class SignalServiceMessageSender {
     long startTime = System.currentTimeMillis();
 
     for (int i = 0; i < RETRY_COUNT; i++) {
+      Log.d(TAG, "Retry #" + i + " started");
       if (cancelationSignal != null && cancelationSignal.isCanceled()) {
+        Log.d(TAG, "Cancellation signal is cancelled (1)");
         throw new CancelationException();
       }
 
       try {
-        OutgoingPushMessageList messages = getEncryptedMessages(recipient, unidentifiedAccess, timestamp, content, online, urgent, story);
+        Log.d(TAG, "Getting encrypted messages");
+        OutgoingPushMessageList messages;
+        try {
+          messages = getEncryptedMessages(recipient, unidentifiedAccess, timestamp, content, online, urgent, story);
+        } catch (Exception e) {
+          Log.w(TAG, e);
+          throw e;
+        }
+        Log.d(TAG, "Got encrypted messages");
 
         if (content.getContent().isPresent() && content.getContent().get().getSyncMessage() != null && content.getContent().get().getSyncMessage().hasSent()) {
           Log.d(TAG, "[sendMessage][" + timestamp + "] Sending a sent sync message to devices: " + messages.getDevices());
@@ -1935,12 +1946,15 @@ public class SignalServiceMessageSender {
         }
 
         if (cancelationSignal != null && cancelationSignal.isCanceled()) {
+          Log.d(TAG, "Cancellation signal is cancelled (2)");
           throw new CancelationException();
         }
 
         if (!unidentifiedAccess.isPresent()) {
           try {
+            Log.d(TAG, "Sending message (no unidentifiedAccess)");
             SendMessageResponse response = new MessagingService.SendResponseProcessor<>(messagingService.send(messages, Optional.empty(), story).blockingGet()).getResultOrThrow();
+            Log.d(TAG, "Sending message (no unidentifiedAccess) success");
             return SendMessageResult.success(recipient, messages.getDevices(), response.sentUnidentified(), response.getNeedsSync() || aciStore.isMultiDevice(), System.currentTimeMillis() - startTime, content.getContent());
           } catch (InvalidUnidentifiedAccessHeaderException | UnregisteredUserException | MismatchedDevicesException | StaleDevicesException e) {
             // Non-technical failures shouldn't be retried with socket
@@ -1953,7 +1967,9 @@ public class SignalServiceMessageSender {
           }
         } else if (unidentifiedAccess.isPresent()) {
           try {
+            Log.d(TAG, "Sending message (unidentifiedAccess)");
             SendMessageResponse response = new MessagingService.SendResponseProcessor<>(messagingService.send(messages, unidentifiedAccess, story).blockingGet()).getResultOrThrow();
+            Log.d(TAG, "Sending message (unidentifiedAccess) success");
             return SendMessageResult.success(recipient, messages.getDevices(), response.sentUnidentified(), response.getNeedsSync() || aciStore.isMultiDevice(), System.currentTimeMillis() - startTime, content.getContent());
           } catch (InvalidUnidentifiedAccessHeaderException | UnregisteredUserException | MismatchedDevicesException | StaleDevicesException e) {
             // Non-technical failures shouldn't be retried with socket
@@ -1970,10 +1986,13 @@ public class SignalServiceMessageSender {
         }
 
         if (cancelationSignal != null && cancelationSignal.isCanceled()) {
+          Log.d(TAG, "Cancellation signal is cancelled (3)");
           throw new CancelationException();
         }
 
+        Log.d(TAG, "Sending message over socket");
         SendMessageResponse response = socket.sendMessage(messages, unidentifiedAccess, story);
+        Log.d(TAG, "Sending message over socket success");
 
         return SendMessageResult.success(recipient, messages.getDevices(), response.sentUnidentified(), response.getNeedsSync() || aciStore.isMultiDevice(), System.currentTimeMillis() - startTime, content.getContent());
 
@@ -1994,6 +2013,10 @@ public class SignalServiceMessageSender {
       } catch (StaleDevicesException ste) {
         Log.w(TAG, "[sendMessage][" + timestamp + "] Handling stale devices. (" + ste.getMessage() + ")");
         handleStaleDevices(recipient, ste.getStaleDevices());
+      } catch (Exception e) {
+        Log.w(TAG, "Failed to send");
+        Log.w(TAG, e);
+        throw e;
       }
     }
 
@@ -2339,13 +2362,18 @@ public class SignalServiceMessageSender {
 
     if (!aciStore.containsSession(signalProtocolAddress)) {
       try {
+        Log.d(TAG, "pre-socket.getPreKeys");
         List<PreKeyBundle> preKeys = getPreKeys(recipient, unidentifiedAccess, deviceId, story);
 
         for (PreKeyBundle preKey : preKeys) {
           try {
+            Log.d(TAG, "pre-SignalProtocolAddress");
             SignalProtocolAddress preKeyAddress  = new SignalProtocolAddress(recipient.getIdentifier(), preKey.getDeviceId());
+            Log.d(TAG, "pre-SignalSessionBuilder");
             SignalSessionBuilder  sessionBuilder = new SignalSessionBuilder(sessionLock, new SessionBuilder(aciStore, preKeyAddress));
+            Log.d(TAG, "pre-sessonBuilder.process");
             sessionBuilder.process(preKey);
+            Log.d(TAG, "post-sessionBuilder.process");
           } catch (org.signal.libsignal.protocol.UntrustedIdentityException e) {
             throw new UntrustedIdentityException("Untrusted identity key!", recipient.getIdentifier(), preKey.getIdentityKey());
           }

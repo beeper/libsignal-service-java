@@ -559,6 +559,7 @@ public class PushServiceSocket {
   {
     try {
       String              responseText = makeServiceRequest(String.format("/v1/messages/%s?story=%s", bundle.getDestination(), story ? "true" : "false"), "PUT", JsonUtil.toJson(bundle), NO_HEADERS, unidentifiedAccess);
+      Log.d(TAG, "Send message response text: " + responseText);
       SendMessageResponse response     = JsonUtil.fromJson(responseText, SendMessageResponse.class);
 
       response.setSentUnidentfied(unidentifiedAccess.isPresent());
