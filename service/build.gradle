@@ -105,12 +105,12 @@ publishing {
                 name = 'signal-service-java'
                 packaging = 'jar'
                 description = 'Signal Service communication library for Java, unofficial fork'
-                url = 'https://gitlab.com/beeper/libsignal-service-java'
+                url = 'https://github.com/beeper/libsignal-service-java'
 
                 scm {
-                    url = 'scm:git@gitlab.com:beeper/libsignal-service-java.git'
-                    connection = 'scm:git@gitlab.com:beeper/libsignal-service-java.git'
-                    developerConnection = 'scm:git@gitlab.com:beeper/libsignal-service-java.git'
+                    url = 'scm:git@github.com:beeper/libsignal-service-java.git'
+                    connection = 'scm:git@github.com:beeper/libsignal-service-java.git'
+                    developerConnection = 'scm:git@github.com:beeper/libsignal-service-java.git'
                 }
 
                 licenses {
@@ -139,13 +139,10 @@ publishing {
 
     repositories {
         maven {
-            url = uri(System.getenv("CI_API_V4_URL") + "/projects/" + System.getenv("CI_PROJECT_ID") + "/packages/maven")
-            credentials(HttpHeaderCredentials) {
-                name = 'Job-Token'
-                value = System.getenv("CI_JOB_TOKEN")
-            }
-            authentication {
-                header(HttpHeaderAuthentication)
+            url = uri("https://maven.pkg.github.com/beeper/libsignal-service-java")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
             }
         }
     }
